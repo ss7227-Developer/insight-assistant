@@ -1,0 +1,23 @@
+[
+  {
+    "id": "q1",
+    "question": "What are the primary revenue sources mentioned in the documents?",
+    "domain": "sample",
+    "relevant_chunk_ids": [],
+    "reference_answer": "Replace this with the actual answer after ingesting your domain documents."
+  },
+  {
+    "id": "q2",
+    "question": "What risk factors are highlighted?",
+    "domain": "sample",
+    "relevant_chunk_ids": [],
+    "reference_answer": "Replace this with the actual answer after ingesting your domain documents."
+  },
+  {
+    "id": "q3",
+    "question": "What key decisions or recommendations are made?",
+    "domain": "sample",
+    "relevant_chunk_ids": [],
+    "reference_answer": "Replace this with the actual answer after ingesting your domain documents."
+  }
+]

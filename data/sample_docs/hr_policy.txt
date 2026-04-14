@@ -1,0 +1,62 @@
+Human Resources Policy Manual — Sample Excerpt
+===============================================
+
+Section 4: Leave and Time-Off Policies
+---------------------------------------
+
+4.1 Annual Leave
+Employees are entitled to 20 days of paid annual leave per calendar year,
+accrued at 1.67 days per month. Unused leave may be carried forward up to
+a maximum of 10 days into the following year. Leave must be approved by
+the direct manager at least 5 business days in advance for periods of 5
+or more consecutive days.
+
+4.2 Sick Leave
+Employees are entitled to 10 days of paid sick leave per year. A medical
+certificate is required for absences exceeding 3 consecutive days. Unused
+sick leave does not carry forward and is not paid out on termination.
+
+4.3 Parental Leave
+Primary caregivers are entitled to 16 weeks of fully paid parental leave.
+Secondary caregivers are entitled to 4 weeks of fully paid parental leave.
+Parental leave must be taken within 12 months of the child's birth or
+adoption placement.
+
+Section 5: Performance Management
+----------------------------------
+
+5.1 Review Cycle
+Performance reviews are conducted twice per year: mid-year (June) and
+year-end (December). All employees are assessed on a 5-point scale across
+four dimensions: technical proficiency, collaboration, communication, and
+strategic impact.
+
+5.2 Compensation Adjustments
+Merit increases are awarded annually in January, based on the year-end
+performance rating. Employees rated 4 or 5 are eligible for increases
+of 5-10%. Employees rated 3 receive a standard cost-of-living adjustment
+of 2-3%. Employees rated below 3 are placed on a Performance Improvement
+Plan (PIP).
+
+5.3 Performance Improvement Plans
+A PIP is a 90-day structured program with clearly defined goals, weekly
+check-ins, and measurable success criteria. Failure to meet PIP objectives
+may result in termination of employment.
+
+Section 6: Code of Conduct
+---------------------------
+
+6.1 Confidentiality
+All employees must maintain strict confidentiality of client data, proprietary
+algorithms, and business strategies. Disclosure of confidential information
+to unauthorized parties is grounds for immediate termination.
+
+6.2 Conflicts of Interest
+Employees must disclose any potential conflicts of interest to HR and their
+manager. This includes board memberships, investments in competitors, or
+family members working at client organizations.
+
+6.3 Workplace Respect
+Acme Analytics Corp is committed to a workplace free from harassment,
+discrimination, and bullying. All complaints are investigated within 10
+business days by the HR department.

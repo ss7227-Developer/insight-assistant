@@ -1,0 +1,50 @@
+Domain Insights Assistant — Sample Document
+==========================================
+
+This is a sample document demonstrating the multi-domain ingestion capability
+of the AI-Powered Domain-Specific Insights Assistant.
+
+Company Overview
+----------------
+Acme Analytics Corp is a data-driven organization focused on leveraging
+artificial intelligence to extract actionable insights from large document
+repositories. The company serves clients in finance, healthcare, legal,
+and human resources sectors.
+
+Key Business Metrics (FY 2024)
+-------------------------------
+- Total Revenue: $48.2 million (up 23% year-over-year)
+- Operating Margin: 18.4%
+- Customer Retention Rate: 94%
+- New Clients Onboarded: 37
+- Documents Processed: 2.1 million
+
+Strategic Priorities
+--------------------
+1. Expand RAG-based document intelligence capabilities
+2. Launch multi-tenant SaaS offering in Q2 2025
+3. Achieve SOC 2 Type II compliance by Q3 2025
+4. Grow headcount in AI/ML engineering by 40%
+
+Risk Factors
+------------
+- Dependency on cloud provider pricing (AWS Bedrock costs)
+- Regulatory changes affecting data residency requirements
+- Competition from large language model providers offering built-in RAG
+- Talent acquisition challenges in the AI/ML market
+
+Technology Stack
+----------------
+The platform is built on a modern, cloud-native architecture:
+- Amazon Bedrock for embedding and generation
+- FAISS for high-performance vector similarity search
+- LangChain for orchestration and retrieval chains
+- Streamlit for rapid dashboard prototyping
+- PostgreSQL and Redis for operational data management
+
+Data Security
+-------------
+All documents are processed within the customer's AWS account boundary.
+No document content is stored by Acme Analytics Corp. FAISS indexes are
+encrypted at rest using AWS KMS. Access is controlled via IAM roles and
+API key authentication.
