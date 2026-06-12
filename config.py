@@ -3,13 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# AWS / Bedrock
-AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-
-EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v1"
-LLM_MODEL_ID = "amazon.titan-text-express-v1"
+# Groq
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Chunking
 CHUNK_SIZE = 800

@@ -5,8 +5,8 @@ using RecursiveCharacterTextSplitter.
 Each chunk inherits source metadata and gets a chunk_id.
 """
 
-from langchain.docstore.document import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import config
 

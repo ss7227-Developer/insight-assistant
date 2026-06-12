@@ -10,7 +10,7 @@ import hashlib
 from datetime import datetime, timezone
 
 import pandas as pd
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".csv", ".xlsx", ".json"}

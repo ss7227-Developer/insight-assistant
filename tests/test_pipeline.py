@@ -69,7 +69,7 @@ def test_normalize_removes_duplicates(sample_txt_dir):
 
 
 def test_normalize_cleans_whitespace():
-    from langchain.docstore.document import Document
+    from langchain_core.documents import Document
 
     dirty = Document(page_content="  Hello   World  \n\n\n\n  Goodbye  ", metadata={})
     result = normalize([dirty])

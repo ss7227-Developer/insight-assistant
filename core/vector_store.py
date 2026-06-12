@@ -8,7 +8,7 @@ Adapted from Financial_chatbot/vector_store_manager.py.
 import os
 
 from langchain_community.vectorstores import FAISS
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 
 import config
 from core.embeddings import get_embeddings

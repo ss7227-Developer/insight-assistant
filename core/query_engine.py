@@ -1,70 +1,52 @@
 """
 query_engine.py
-Builds the LangChain RAG chain and runs queries.
+Builds the RAG chain and runs queries using Groq + FAISS retrieval.
 The LLM is prompted to return a structured JSON response with:
   answer, key_insights, confidence (high|medium|low)
-Adapted from Financial_chatbot/query_assistant.py.
 """
 
 import json
 import re
+from dataclasses import dataclass
 
-import boto3
-from langchain_community.llms import Bedrock
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.docstore.document import Document
+import groq as groq_sdk
+from langchain_core.documents import Document
 
 import config
 from core.vector_store import load_index
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT_BASE = (
     "You are an AI assistant that extracts structured insights from domain-specific documents. "
     "Answer ONLY based on the provided context. Do NOT fabricate information. "
     "Respond with valid JSON in this exact format:\n"
-    '{{\n'
+    '{\n'
     '  "answer": "<concise answer to the question>",\n'
     '  "key_insights": ["<insight 1>", "<insight 2>", "<insight 3>"],\n'
     '  "confidence": "<high|medium|low>"\n'
-    '}}\n\n'
-    "Context:\n{context}"
+    '}\n\n'
+    "Context:\n"
 )
 
 
-def create_chain(domain: str):
+@dataclass
+class _Chain:
+    """Lightweight container holding a loaded FAISS vector store."""
+    vector_store: object
+    domain: str
+
+
+def create_chain(domain: str) -> _Chain:
     """
-    Load the FAISS index for the given domain and return a LangChain retrieval chain.
-    The chain expects input dict: {input: str} and returns {answer: str, context: list[Document]}.
+    Load the FAISS index for the given domain and return a chain object.
+    Signature kept identical to the original so callers are unchanged.
     """
     vector_store = load_index(domain)
-
-    session = boto3.Session(
-        region_name=config.AWS_REGION,
-        aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
-    )
-    bedrock_client = session.client(service_name="bedrock-runtime")
-
-    llm = Bedrock(
-        client=bedrock_client,
-        model_id=config.LLM_MODEL_ID,
-        model_kwargs={"temperature": 0.1, "maxTokenCount": 600},
-    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", _SYSTEM_PROMPT),
-        ("human", "{input}"),
-    ])
-
-    document_chain = create_stuff_documents_chain(llm, prompt)
-    retriever = vector_store.as_retriever(search_kwargs={"k": config.RETRIEVER_K})
-    return create_retrieval_chain(retriever, document_chain)
+    return _Chain(vector_store=vector_store, domain=domain)
 
 
-def query(chain, question: str, k: int = config.RETRIEVER_K) -> dict:
+def query(chain: _Chain, question: str, k: int = config.RETRIEVER_K) -> dict:
     """
-    Run a question through the RAG chain.
+    Run a question through the RAG pipeline.
 
     Returns:
         {
@@ -75,9 +57,26 @@ def query(chain, question: str, k: int = config.RETRIEVER_K) -> dict:
             "raw_response": str,
         }
     """
-    result = chain.invoke({"input": question})
-    raw = result.get("answer", "")
-    source_docs: list[Document] = result.get("context", [])
+    # 1. Retrieve relevant chunks
+    retriever = chain.vector_store.as_retriever(search_kwargs={"k": k})
+    source_docs: list[Document] = retriever.invoke(question)
+
+    # 2. Build context string
+    context = "\n\n".join(doc.page_content for doc in source_docs)
+
+    # 3. Call Groq
+    client = groq_sdk.Groq(api_key=config.GROQ_API_KEY)
+    system_msg = _SYSTEM_PROMPT_BASE + context
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": question},
+        ],
+        temperature=0.1,
+        max_tokens=600,
+    )
+    raw = response.choices[0].message.content or ""
 
     parsed = _parse_response(raw)
     parsed["source_docs"] = source_docs
@@ -87,7 +86,6 @@ def query(chain, question: str, k: int = config.RETRIEVER_K) -> dict:
 
 def _parse_response(raw: str) -> dict:
     """Extract JSON from LLM output, falling back gracefully."""
-    # Try to find a JSON block
     json_match = re.search(r"\{.*\}", raw, re.DOTALL)
     if json_match:
         try:
@@ -100,5 +98,4 @@ def _parse_response(raw: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    # Fallback: return raw text as the answer
     return {"answer": raw, "key_insights": [], "confidence": "low"}

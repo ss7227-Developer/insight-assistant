@@ -6,8 +6,8 @@ Provides source attribution and relevance scoring for RAG outputs.
 """
 
 import numpy as np
-from langchain.docstore.document import Document
-from langchain_community.embeddings import BedrockEmbeddings
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 
 
 def build_citations(source_docs: list[Document]) -> list[dict]:
@@ -43,7 +43,7 @@ def build_citations(source_docs: list[Document]) -> list[dict]:
 def score_relevance(
     query: str,
     docs: list[Document],
-    embeddings: BedrockEmbeddings,
+    embeddings: Embeddings,
 ) -> list[float]:
     """
     Compute cosine similarity between the query embedding and each document embedding.

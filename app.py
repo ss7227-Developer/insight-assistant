@@ -1,256 +1,225 @@
 """
 app.py
-Streamlit frontend for the AI-Powered Domain-Specific Insights Assistant.
+FastAPI backend for the AI-Powered Domain-Specific Insights Assistant.
 
-Tabs:
-  1. Chat with Documents  — query a domain, see structured insights + citations
-  2. Ingest Documents     — upload files, build a FAISS index for a new/existing domain
-  3. Evaluate Retrieval   — run precision@k / recall@k / MRR benchmarks
+Endpoints (no authentication required):
+  GET  /api/health
+  GET  /api/domains
+  POST /api/ingest
+  POST /api/query
+
+Session isolation:
+  Every browser session generates a UUID on page load and sends it as
+  X-Session-ID on every request.  Uploaded domains are stored as
+  "{session_id}__{domain}" so they are invisible to any other session.
+  The "demo" domain has no prefix and is visible to everyone.
+  Session indexes older than 24 hours are purged on startup.
 """
 
 import os
+import shutil
 import tempfile
+import time
+from contextlib import asynccontextmanager
+from typing import List
 
-import streamlit as st
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from pipelines.document_loader import load_documents
 from pipelines.text_normalizer import normalize
 from pipelines.chunker import chunk_documents
 from core.vector_store import build_index, load_index, list_domains
 from core.query_engine import create_chain, query
-from core.explainability import build_citations, score_relevance
-from core.embeddings import get_embeddings
-from evaluation.benchmark_runner import run_benchmark
+from core.explainability import build_citations
 
-# ── Page config ────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Insights Assistant",
-    page_icon="🔍",
-    layout="wide",
+# ── Constants ─────────────────────────────────────────────────────────────────────
+
+_PUBLIC_DOMAINS = {"demo"}
+_SESSION_INDEX_MAX_AGE = 24 * 3600  # seconds
+
+
+# ── Domain helpers ────────────────────────────────────────────────────────────────
+
+def _storage_key(session_id: str, domain: str) -> str:
+    return f"{session_id}__{domain}"
+
+
+def _session_domains(session_id: str) -> list[str]:
+    """Domains visible in this session: public ones + session-specific ones."""
+    all_stored = set(list_domains())
+    result = [pd for pd in _PUBLIC_DOMAINS if pd in all_stored]
+    prefix = f"{session_id}__"
+    for d in all_stored:
+        if d.startswith(prefix):
+            result.append(d[len(prefix):])
+    return sorted(result)
+
+
+def _resolve_key(session_id: str, domain: str) -> str:
+    if domain in _PUBLIC_DOMAINS:
+        return domain
+    return _storage_key(session_id, domain)
+
+
+# ── Startup tasks ─────────────────────────────────────────────────────────────────
+
+def _ingest_demo() -> None:
+    demo_dir = os.path.join("data", "sample_docs")
+    if not os.path.isdir(demo_dir):
+        print("[startup] data/sample_docs/ not found — skipping demo ingestion.")
+        return
+    if "demo" in list_domains():
+        print("[startup] 'demo' domain already indexed — skipping.")
+        return
+    print("[startup] Ingesting data/sample_docs/ into 'demo' domain...")
+    try:
+        docs = load_documents(demo_dir, domain="demo")
+        docs = normalize(docs)
+        chunks = chunk_documents(docs)
+        build_index("demo", chunks)
+        print(f"[startup] Demo domain ready ({len(chunks)} chunks).")
+    except Exception as exc:
+        print(f"[startup] Demo ingestion failed: {exc}")
+
+
+def _cleanup_old_sessions() -> None:
+    """Delete session-specific indexes older than 24 hours."""
+    indexes_dir = "indexes"
+    if not os.path.exists(indexes_dir):
+        return
+    cutoff = time.time() - _SESSION_INDEX_MAX_AGE
+    removed = 0
+    for name in os.listdir(indexes_dir):
+        if "__" not in name:
+            continue  # public domain — leave it
+        path = os.path.join(indexes_dir, name)
+        if os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+            shutil.rmtree(path, ignore_errors=True)
+            removed += 1
+    if removed:
+        print(f"[startup] Cleaned up {removed} expired session index(es).")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _cleanup_old_sessions()
+    _ingest_demo()
+    yield
+
+
+# ── App ───────────────────────────────────────────────────────────────────────────
+
+app = FastAPI(title="Insights Assistant API", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# ── Session state ───────────────────────────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "chain" not in st.session_state:
-    st.session_state.chain = None
-if "active_domain" not in st.session_state:
-    st.session_state.active_domain = None
 
-# ── Header ──────────────────────────────────────────────────────────────────────
-st.title("AI-Powered Domain-Specific Insights Assistant")
-st.caption("RAG system powered by Amazon Bedrock embeddings + FAISS")
+# ── Schemas ───────────────────────────────────────────────────────────────────────
 
-tab_chat, tab_ingest, tab_eval = st.tabs(
-    ["💬 Chat with Documents", "📂 Ingest Documents", "📊 Evaluate Retrieval"]
-)
+class QueryRequest(BaseModel):
+    question: str
+    domain: str
 
 
-# ════════════════════════════════════════════════════════════════════════════════
-# TAB 1 — CHAT
-# ════════════════════════════════════════════════════════════════════════════════
-with tab_chat:
-    domains = list_domains()
+class CitationOut(BaseModel):
+    source: str
+    domain: str
+    page_num: int | None
+    excerpt: str
 
-    if not domains:
-        st.info("No document indexes found. Go to the **Ingest Documents** tab to upload files first.")
-    else:
-        # Sidebar-style domain selector
-        col_left, col_right = st.columns([1, 3])
-        with col_left:
-            selected_domain = st.selectbox("Select domain", domains, key="chat_domain")
 
-            if st.button("Load domain", key="load_domain"):
-                with st.spinner(f"Loading index for '{selected_domain}'..."):
-                    try:
-                        st.session_state.chain = create_chain(selected_domain)
-                        st.session_state.active_domain = selected_domain
-                        st.session_state.messages = []
-                        st.success(f"Domain '{selected_domain}' loaded.")
-                    except Exception as e:
-                        st.error(f"Failed to load domain: {e}")
+class QueryResponse(BaseModel):
+    answer: str
+    key_insights: List[str]
+    confidence: str
+    citations: List[CitationOut]
 
-        with col_right:
-            if st.session_state.active_domain:
-                st.markdown(f"**Active domain:** `{st.session_state.active_domain}`")
-            else:
-                st.markdown("*No domain loaded yet. Click **Load domain**.*")
 
-        st.divider()
+# ── Routes ────────────────────────────────────────────────────────────────────────
 
-        # Chat history
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-                if msg["role"] == "assistant" and msg.get("key_insights"):
-                    with st.expander("Key Insights"):
-                        for insight in msg["key_insights"]:
-                            st.markdown(f"- {insight}")
-                if msg["role"] == "assistant" and msg.get("citations"):
-                    with st.expander("Sources"):
-                        for c in msg["citations"]:
-                            page = f" (page {c['page_num']})" if c.get("page_num") else ""
-                            st.markdown(f"**{c['source']}**{page} — *{c['excerpt']}...*")
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
 
-        # Chat input
-        user_input = st.chat_input(
-            "Ask a question about your documents...",
-            disabled=(st.session_state.chain is None),
+
+@app.get("/api/domains")
+def domains(x_session_id: str = Header(default="anonymous")):
+    return {"domains": _session_domains(x_session_id)}
+
+
+@app.post("/api/ingest")
+async def ingest(
+    domain: str = Form(...),
+    files: List[UploadFile] = File(...),
+    x_session_id: str = Header(default="anonymous"),
+):
+    domain = domain.strip().lower()
+    if not domain:
+        raise HTTPException(status_code=422, detail="domain must not be empty")
+    if domain in _PUBLIC_DOMAINS:
+        raise HTTPException(status_code=400, detail=f"'{domain}' is a reserved domain name")
+    if not files:
+        raise HTTPException(status_code=422, detail="at least one file required")
+
+    storage_key = _storage_key(x_session_id, domain)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for uf in files:
+            dest = os.path.join(tmp_dir, uf.filename)
+            content = await uf.read()
+            with open(dest, "wb") as f:
+                f.write(content)
+
+        docs = load_documents(tmp_dir, domain=domain)
+        if not docs:
+            raise HTTPException(status_code=422, detail="no extractable content in uploaded files")
+
+        docs = normalize(docs)
+        chunks = chunk_documents(docs)
+
+        try:
+            build_index(storage_key, chunks)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"indexing failed: {exc}")
+
+    return {"domain": domain, "files_ingested": len(files), "chunks_indexed": len(chunks)}
+
+
+@app.post("/api/query", response_model=QueryResponse)
+def query_endpoint(
+    req: QueryRequest,
+    x_session_id: str = Header(default="anonymous"),
+):
+    storage_key = _resolve_key(x_session_id, req.domain)
+    if storage_key not in list_domains():
+        raise HTTPException(status_code=404, detail=f"domain '{req.domain}' not found")
+
+    try:
+        chain = create_chain(storage_key)
+        result = query(chain, req.question)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    citations = [
+        CitationOut(
+            source=c["source"],
+            domain=c.get("domain", ""),
+            page_num=c.get("page_num"),
+            excerpt=c["excerpt"],
         )
+        for c in build_citations(result["source_docs"])
+    ]
 
-        if user_input:
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.chat_message("user"):
-                st.markdown(user_input)
-
-            with st.chat_message("assistant"):
-                with st.spinner("Retrieving and generating insights..."):
-                    try:
-                        result = query(st.session_state.chain, user_input)
-                        answer = result["answer"]
-                        key_insights = result["key_insights"]
-                        confidence = result["confidence"]
-                        source_docs = result["source_docs"]
-                        citations = build_citations(source_docs)
-
-                        # Confidence color
-                        confidence_badge = {
-                            "high": "🟢 High",
-                            "medium": "🟡 Medium",
-                            "low": "🔴 Low",
-                        }.get(confidence, "⚪ Unknown")
-
-                        st.markdown(answer)
-                        st.caption(f"Confidence: {confidence_badge}")
-
-                        if key_insights:
-                            with st.expander("Key Insights"):
-                                for insight in key_insights:
-                                    st.markdown(f"- {insight}")
-
-                        if citations:
-                            with st.expander("Sources"):
-                                for c in citations:
-                                    page = f" (page {c['page_num']})" if c.get("page_num") else ""
-                                    st.markdown(f"**{c['source']}**{page} — *{c['excerpt']}...*")
-
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": answer,
-                            "key_insights": key_insights,
-                            "citations": citations,
-                        })
-                    except Exception as e:
-                        st.error(f"Query failed: {e}")
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# TAB 2 — INGEST
-# ════════════════════════════════════════════════════════════════════════════════
-with tab_ingest:
-    st.subheader("Upload Documents")
-    st.markdown(
-        "Supported formats: **.txt, .md, .pdf, .docx, .csv, .xlsx, .json**  \n"
-        "Files are chunked and indexed into a domain-specific FAISS store."
+    return QueryResponse(
+        answer=result["answer"],
+        key_insights=result["key_insights"],
+        confidence=result["confidence"],
+        citations=citations,
     )
-
-    domain_name = st.text_input(
-        "Domain name",
-        placeholder="e.g. finance, legal, hr-policies",
-        help="Use a short, lowercase identifier. Existing domain indexes will be overwritten.",
-    )
-
-    uploaded_files = st.file_uploader(
-        "Choose files",
-        accept_multiple_files=True,
-        type=["txt", "md", "pdf", "docx", "csv", "xlsx", "json"],
-    )
-
-    if st.button("Ingest & Index", disabled=(not domain_name or not uploaded_files)):
-        progress = st.progress(0, text="Saving uploaded files...")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Save uploads to temp dir
-            for uf in uploaded_files:
-                dest = os.path.join(tmp_dir, uf.name)
-                with open(dest, "wb") as f:
-                    f.write(uf.getbuffer())
-
-            progress.progress(20, text="Loading documents...")
-            docs = load_documents(tmp_dir, domain=domain_name)
-
-            if not docs:
-                st.error("No content could be extracted from the uploaded files.")
-            else:
-                progress.progress(40, text="Normalizing text...")
-                docs = normalize(docs)
-
-                progress.progress(60, text="Chunking documents...")
-                chunks = chunk_documents(docs)
-
-                progress.progress(80, text=f"Building FAISS index ({len(chunks)} chunks)...")
-                try:
-                    build_index(domain_name, chunks)
-                    progress.progress(100, text="Done!")
-                    st.success(
-                        f"Ingested **{len(uploaded_files)} file(s)** into domain "
-                        f"**'{domain_name}'** — **{len(chunks)} chunks** indexed."
-                    )
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Indexing failed: {e}")
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# TAB 3 — EVALUATE
-# ════════════════════════════════════════════════════════════════════════════════
-with tab_eval:
-    st.subheader("Retrieval Benchmark")
-    st.markdown(
-        "Run precision@k, recall@k, MRR, and NDCG benchmarks against a ground-truth QA file. "
-        "Edit `evaluation/ground_truth/sample_qa.json` to add your own questions."
-    )
-
-    eval_domains = list_domains()
-    if not eval_domains:
-        st.info("No indexes found. Ingest documents first.")
-    else:
-        eval_domain = st.selectbox("Domain", eval_domains, key="eval_domain")
-
-        qa_file = st.text_input(
-            "Ground-truth QA file path",
-            value="evaluation/ground_truth/sample_qa.json",
-        )
-
-        k_slider = st.slider("k (number of retrieved docs)", min_value=1, max_value=10, value=5)
-
-        if st.button("Run Benchmark"):
-            if not os.path.exists(qa_file):
-                st.error(f"QA file not found: {qa_file}")
-            else:
-                with st.spinner("Running benchmark..."):
-                    try:
-                        report = run_benchmark(domain=eval_domain, qa_path=qa_file, k=k_slider)
-
-                        # Summary metrics
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric(f"Precision@{k_slider}", f"{report['avg_precision_at_k']:.4f}")
-                        col2.metric(f"Recall@{k_slider}", f"{report['avg_recall_at_k']:.4f}")
-                        col3.metric("MRR", f"{report['avg_mrr']:.4f}")
-                        col4.metric(f"NDCG@{k_slider}", f"{report['avg_ndcg_at_k']:.4f}")
-
-                        st.divider()
-                        st.markdown("**Per-question breakdown:**")
-
-                        for r in report["per_question"]:
-                            with st.expander(f"[{r['id']}] {r['question'][:80]}..."):
-                                sub1, sub2, sub3, sub4 = st.columns(4)
-                                sub1.metric(f"P@{k_slider}", r["precision_at_k"])
-                                sub2.metric(f"R@{k_slider}", r["recall_at_k"])
-                                sub3.metric("MRR", r["mrr"])
-                                sub4.metric(f"NDCG@{k_slider}", r["ndcg_at_k"])
-                                st.markdown(f"**Retrieved:** {r['retrieved_ids']}")
-                                st.markdown(f"**Relevant:** {r['relevant_ids']}")
-
-                    except Exception as e:
-                        st.error(f"Benchmark failed: {e}")

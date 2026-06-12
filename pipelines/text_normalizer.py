@@ -10,7 +10,7 @@ import hashlib
 import re
 import unicodedata
 
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 
 
 def normalize(docs: list[Document]) -> list[Document]:
