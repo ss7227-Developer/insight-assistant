@@ -1,3 +1,12 @@
+---
+title: DocInsight
+emoji: 🔍
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # AI-Powered Domain-Specific Insights Assistant
 
 A production-quality **Retrieval-Augmented Generation (RAG)** system that extracts structured insights from large domain-specific document corpora. Powered by HuggingFace sentence-transformers (local embeddings), FAISS vector search, LangChain, and Groq LLaMA-3.
@@ -23,14 +32,14 @@ FastAPI Backend (HuggingFace Spaces / Docker)
 
 ## Features
 
-| Feature | Detail |
-|---|---|
-| **Multi-format ingestion** | PDF, DOCX, CSV/XLSX, JSON, TXT/MD |
-| **Multi-domain indexing** | Separate FAISS index per domain |
-| **Structured insight extraction** | Returns `answer`, `key_insights[]`, `confidence` |
-| **Source attribution** | Cites source file, page number, and excerpt |
-| **Demo domain** | Auto-ingested from `data/sample_docs/` on startup |
-| **Next.js frontend** | Chat + Upload tabs, dark sidebar, Tailwind CSS |
+| Feature                           | Detail                                            |
+| --------------------------------- | ------------------------------------------------- |
+| **Multi-format ingestion**        | PDF, DOCX, CSV/XLSX, JSON, TXT/MD                 |
+| **Multi-domain indexing**         | Separate FAISS index per domain                   |
+| **Structured insight extraction** | Returns `answer`, `key_insights[]`, `confidence`  |
+| **Source attribution**            | Cites source file, page number, and excerpt       |
+| **Demo domain**                   | Auto-ingested from `data/sample_docs/` on startup |
+| **Next.js frontend**              | Chat + Upload tabs, dark sidebar, Tailwind CSS    |
 
 ---
 
@@ -122,10 +131,10 @@ HuggingFace will build the Dockerfile and start the server. The first build down
 
 The only configuration needed is `NEXT_PUBLIC_BACKEND_URL`:
 
-| Environment | Value |
-|---|---|
-| Local dev | `http://localhost:7860` (default in `.env.local`) |
-| Production | `https://<username>-<space-name>.hf.space` |
+| Environment | Value                                             |
+| ----------- | ------------------------------------------------- |
+| Local dev   | `http://localhost:7860` (default in `.env.local`) |
+| Production  | `https://<username>-<space-name>.hf.space`        |
 
 Set this in `frontend/.env.local` for local dev, or as a Vercel environment variable for production.
 
@@ -178,12 +187,12 @@ Insight_Assistant/
 
 ## API Reference
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/health` | Liveness check |
-| GET | `/api/domains` | List indexed domains |
-| POST | `/api/ingest` | Multipart: `domain` (string) + `files` (one or more) |
-| POST | `/api/query` | JSON `{ question, domain }` → structured answer |
+| Method | Endpoint       | Description                                          |
+| ------ | -------------- | ---------------------------------------------------- |
+| GET    | `/api/health`  | Liveness check                                       |
+| GET    | `/api/domains` | List indexed domains                                 |
+| POST   | `/api/ingest`  | Multipart: `domain` (string) + `files` (one or more) |
+| POST   | `/api/query`   | JSON `{ question, domain }` → structured answer      |
 
 Full interactive docs at `http://localhost:7860/docs` when running locally.
 
@@ -193,12 +202,12 @@ Full interactive docs at `http://localhost:7860/docs` when running locally.
 
 Edit `config.py` to change:
 
-| Setting | Default | Description |
-|---|---|---|
-| `GROQ_API_KEY` | env var | Your Groq API key |
-| `CHUNK_SIZE` | `800` | Characters per chunk |
-| `CHUNK_OVERLAP` | `150` | Overlap between chunks |
-| `RETRIEVER_K` | `5` | Documents retrieved per query |
+| Setting         | Default | Description                   |
+| --------------- | ------- | ----------------------------- |
+| `GROQ_API_KEY`  | env var | Your Groq API key             |
+| `CHUNK_SIZE`    | `800`   | Characters per chunk          |
+| `CHUNK_OVERLAP` | `150`   | Overlap between chunks        |
+| `RETRIEVER_K`   | `5`     | Documents retrieved per query |
 
 ---
 
